@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Generate Scotty3D.exe",
+            "type": "shell",
+            "command": "node",
+            "args": [
+                "Maekfile.js"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run Scotty3D.exe",
+            "type": "shell",
+            "command": "${workspaceFolder}/Scotty3D.exe --run-tests a1.task1",
+            "args": [
+                //"--run-tests a1.task1" //"--help"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Generate and Run Scotty3D",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Generate Scotty3D.exe",
+                "Run Scotty3D.exe"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
