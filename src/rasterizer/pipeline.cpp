@@ -360,15 +360,78 @@ void Pipeline<p, P, flags>::rasterize_line(
 	// TODO: Check out the block comment above this function for more information on how to fill in
 	// this function!
 	// The OpenGL specification section 3.5 may also come in handy.
+	float x0 = va.fb_position.x;
+	float y0 = va.fb_position.y;
+	float x1 = vb.fb_position.x;
+	float y1 = vb.fb_position.y;
 
-	{ // As a placeholder, draw a point in the middle of the line:
-		//(remove this code once you have a real implementation)
+	bool isSteep = abs(y1 - y0) > abs(x1 - x0);//slope >1 or <1
+    if (isSteep) {//exchange xy，slope in [-1，1]
+        std::swap(x0, y0);
+        std::swap(x1, y1);
+    }
+
+    if (x0 > x1) {//uniform x increasement
+        std::swap(x0, x1);
+        std::swap(y0, y1);
+    }
+    // we only need handle slope between [-1,1]
+
+ 	
+    int sx0 = (int)floor(x0);
+    int sy0 = (int)floor(y0);
+    int sx1 = (int)floor(x1);
+    //int sy1 = (int)floor(y1);
+
+ 	float dx = x1 - x0;
+    float dy = abs(y1 - y0);
+    float m = dy / dx;
+    float error = 0;//[-0.5, 0.5]
+	
+    int curx = sx0;
+    int cury = sy0;
+
+    int ystep = y0 < y1 ? 1 : -1;
+
+	if (sx0 == sx1) return;//test1特判，会导致求z时的除0错误
+	for (; curx <= sx1; curx++) {
+		Fragment frag;
+        if (!isSteep) {//xy not exchange
+			frag.fb_position = Vec3(
+				curx + 0.5f, 
+				cury + 0.5f, 
+				va.fb_position.z + (vb.fb_position.z - va.fb_position.z) * (abs(curx - sx0) / abs(sx1 - sx0))
+			);
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+        }
+        else {
+        	frag.fb_position = Vec3(
+				cury + 0.5f, 
+				curx + 0.5f, 
+				va.fb_position.z + (vb.fb_position.z - va.fb_position.z) * (abs(curx - sx0) / abs(sx1 - sx0))
+			);
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+        }
+		emit_fragment(frag);
+
+        error = error + m;
+        if (error >= 0.5) {
+            cury += ystep;
+            error -= 1;
+        }
+    }
+
+	
+	return;
+	/*{ // 以下是绘制一个点
 		Fragment mid;
 		mid.fb_position = (va.fb_position + vb.fb_position) / 2.0f;
 		mid.attributes = va.attributes;
 		mid.derivatives.fill(Vec2(0.0f, 0.0f));
 		emit_fragment(mid);
-	}
+	}*/
 
 }
 

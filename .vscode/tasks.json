@@ -20,7 +20,7 @@
         {
             "label": "Run Scotty3D.exe",
             "type": "shell",
-            "command": "${workspaceFolder}/Scotty3D.exe --run-tests a1.task1",
+            "command": "${workspaceFolder}/Scotty3D.exe",
             "args": [
                 //"--run-tests a1.task1" //"--help"
             ],
@@ -39,6 +39,19 @@
             "dependsOn": [
                 "Generate Scotty3D.exe",
                 "Run Scotty3D.exe"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Generate and Test Scotty3D",
+            "type": "shell",
+            "command": "${workspaceFolder}/Scotty3D.exe --run-tests a1.task2",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Generate Scotty3D.exe",
             ],
             "group": {
                 "kind": "build",
