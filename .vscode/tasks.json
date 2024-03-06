@@ -48,7 +48,7 @@
         {
             "label": "Generate and Test Scotty3D",
             "type": "shell",
-            "command": "${workspaceFolder}/Scotty3D.exe --run-tests a1.task3.",
+            "command": "${workspaceFolder}/Scotty3D.exe --run-tests a1.task4.",
             "dependsOrder": "sequence",
             "dependsOn": [
                 "Generate Scotty3D.exe",

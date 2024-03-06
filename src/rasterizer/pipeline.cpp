@@ -142,6 +142,9 @@ void Pipeline<primitive_type, Program, flags>::run(std::vector<Vertex> const& ve
 			// "Less" means the depth test passes when the new fragment has depth less than the stored depth.
 			// A1T4: Depth_Less
 			// TODO: implement depth test! We want to only emit fragments that have a depth less than the stored depth, hence "Depth_Less".
+			if (f.fb_position.z >= fb_depth) {
+				continue;//没有通过深度测试
+			}
 		} else {
 			static_assert((flags & PipelineMask_Depth) <= Pipeline_Depth_Always, "Unknown depth test flag.");
 		}
@@ -164,12 +167,12 @@ void Pipeline<primitive_type, Program, flags>::run(std::vector<Vertex> const& ve
 			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Add) {
 				// A1T4: Blend_Add
 				// TODO: framebuffer color should have fragment color multiplied by fragment opacity added to it.
-				fb_color = sf.color; //<-- replace this line
+				fb_color += sf.color * sf.opacity; //<-- replace this line
 			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Over) {
 				// A1T4: Blend_Over
 				// TODO: set framebuffer color to the result of "over" blending (also called "alpha blending") the fragment color over the framebuffer color, using the fragment's opacity
 				// 		 You may assume that the framebuffer color has its alpha premultiplied already, and you just want to compute the resulting composite color
-				fb_color = sf.color; //<-- replace this line
+				fb_color = sf.color * sf.opacity + fb_color * (1 - sf.opacity); //<-- replace this line
 			} else {
 				static_assert((flags & PipelineMask_Blend) <= Pipeline_Blend_Over, "Unknown blending flag.");
 			}
@@ -516,7 +519,7 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 					float alpha = Spbc / Sabc;
 					float beta = Spca / Sabc;
 					float gamma = Spab / Sabc;
-					frag.fb_position.z = alpha * va.fb_position.z + beta * vb.fb_position.z + gamma * vb.fb_position.z;
+					frag.fb_position.z = alpha * va.fb_position.z + beta * vb.fb_position.z + gamma * vc.fb_position.z;
 					frag.attributes = va.attributes;
 
 					emit_fragment(frag);
