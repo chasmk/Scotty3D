@@ -483,12 +483,50 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 	if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Flat) {
 		// A1T3: flat triangles
 		// TODO: rasterize triangle (see block comment above this function).
+		int minx = (int)std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x));
+		int miny = (int)std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y));
+		int maxx = (int)std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x));
+		int maxy = (int)std::max(va.fb_position.y, std::max(vb.fb_position.y, vc.fb_position.y));
 
-		// As a placeholder, here's code that draws some lines:
-		//(remove this and replace it with a real solution)
-		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(va, vb, emit_fragment);
-		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vb, vc, emit_fragment);
-		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vc, va, emit_fragment);
+		for (int i = miny; i <= maxy; i++) {
+			for (int j = minx; j <= maxx; j++) {
+				Vec2 P(j + 0.5f, i + 0.5f);
+				Vec2 A(va.fb_position.x, va.fb_position.y);
+				Vec2 B(vb.fb_position.x, vb.fb_position.y);
+				Vec2 C(vc.fb_position.x, vc.fb_position.y);
+				Vec2 AP = P - A;
+				Vec2 BP = P - B;
+				Vec2 CP = P - C;
+				Vec2 AB = B - A;
+				Vec2 BC = C - B;
+				Vec2 CA = A - C;
+				Vec2 AC = -CA;
+				float z1 = AP.x * AB.y - AP.y * AB.x;
+				float z2 = BP.x * BC.y - BP.y * BC.x;
+				float z3 = CP.x * CA.y - CP.y * CA.x;
+				if (z1 > 0 && z2 > 0 && z3 > 0 || z1 < 0 && z2 < 0 && z3 < 0) {
+					Fragment frag;
+					frag.fb_position.x = j + 0.5f;
+					frag.fb_position.y = i + 0.5f;
+					// 求重心坐标, 得到z的插值
+					float Sabc = 0.5f * abs(AB.x * AC.y - AB.y * AC.x);
+					float Spab = 0.5f * abs(AP.x * AB.y - AP.y * AB.x);
+					float Spbc = 0.5f * abs(BP.x * BC.y - BP.y * BC.x);
+					float Spca = 0.5f * abs(CP.x * CA.y - CP.y * CA.x);
+					float alpha = Spbc / Sabc;
+					float beta = Spca / Sabc;
+					float gamma = Spab / Sabc;
+					frag.fb_position.z = alpha * va.fb_position.z + beta * vb.fb_position.z + gamma * vb.fb_position.z;
+					frag.attributes = va.attributes;
+
+					emit_fragment(frag);
+				}
+			}
+		}
+
+		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(va, vb, emit_fragment);
+		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vb, vc, emit_fragment);
+		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vc, va, emit_fragment);
 	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Smooth) {
 		// A1T5: screen-space smooth triangles
 		// TODO: rasterize triangle (see block comment above this function).
