@@ -483,9 +483,10 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 	//  same code paths. Be aware, however, that all of them need to remain working!
 	//  (e.g., if you break Flat while implementing Correct, you won't get points
 	//   for Flat.)
+	// A1T3: flat triangles
+	// TODO: rasterize triangle (see block comment above this function).
+	
 	if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Flat) {
-		// A1T3: flat triangles
-		// TODO: rasterize triangle (see block comment above this function).
 		int minx = (int)std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x));
 		int miny = (int)std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y));
 		int maxx = (int)std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x));
@@ -521,30 +522,190 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 					float gamma = Spab / Sabc;
 					frag.fb_position.z = alpha * va.fb_position.z + beta * vb.fb_position.z + gamma * vc.fb_position.z;
 					frag.attributes = va.attributes;
-
 					emit_fragment(frag);
 				}
 			}
 		}
-
-		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(va, vb, emit_fragment);
-		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vb, vc, emit_fragment);
-		//Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vc, va, emit_fragment);
-	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Smooth) {
-		// A1T5: screen-space smooth triangles
+	} else {
 		// TODO: rasterize triangle (see block comment above this function).
+		int minx = (int)std::floor(std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x)));
+		int miny = (int)std::floor(std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y)));
+		int maxx = (int)std::ceil(std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x)));
+		int maxy = (int)std::ceil(std::max(va.fb_position.y, std::max(vb.fb_position.y, vc.fb_position.y)));
+		//若框边长是奇数，则扩充到偶数，用于匹配2x2
+		/*if ((maxx - minx) % 2 == 1) {
+			if (minx > 0) minx--;
+			else maxx++;
+		}
+		if ((maxy - miny) % 2 == 1) {
+			if (miny > 0) miny--;
+			else maxy++;
+		}*/
+		//std::cout<<va.fb_position.x<<" "<<vb.fb_position.x<<" "<<vc.fb_position.x<<std::endl;
+		//std::cout<<"xy  "<<minx<<" "<<maxx<<" "<<miny<<" "<<maxy<<std::endl;
 
-		// As a placeholder, here's code that calls the Flat interpolation version of the function:
-		//(remove this and replace it with a real solution)
-		Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Flat>::rasterize_triangle(va, vb, vc, emit_fragment);
-	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Correct) {
-		// A1T5: perspective correct triangles
-		// TODO: rasterize triangle (block comment above this function).
+		//分别存放 i,j	z1,z2,z3	alpha,beta,gamma
+		std::vector<std::vector<Vec3>> res(4);
+		Vec2 vva(va.fb_position.x, va.fb_position.y);
+		Vec2 vvb(vb.fb_position.x, vb.fb_position.y);
+		Vec2 vvc(vc.fb_position.x, vc.fb_position.y);
+		//一次处理四个块
+		for (int i = miny; i < maxy; i+=2) {
+			for (int j = minx; j < maxx; j+=2) {
+				res.resize(4);
+				//计算四个片元的 i,j	z1,z2,z3	alpha,beta,gamma
+				res[0] = CalculateFragment(vva, vvb, vvc, i, 	j);
+				if (j + 1 < maxx) 
+					res[1] = CalculateFragment(vva, vvb, vvc, i, 	j + 1);
+				if (i + 1 < maxy) 
+					res[2] = CalculateFragment(vva, vvb, vvc, i + 1, j);
+				if (i + 1 < maxy && j + 1 < maxx) 
+					res[3] = CalculateFragment(vva, vvb, vvc, i + 1, j + 1);
+				//std::cout<<res.size()<<" size\n";
+				//std::cout<<res[2][2].x<<" "<<res[2][2].y<<" "<<res[2][2].z<<std::endl;
+				//遍历这四个片元
+				for (int k = 0; k < 4; k++) {
 
-		// As a placeholder, here's code that calls the Screen-space interpolation function:
-		//(remove this and replace it with a real solution)
-		Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Smooth>::rasterize_triangle(va, vb, vc, emit_fragment);
+					if (res[k].size() == 0) continue;//只处理在三角形内的点
+
+					Fragment frag;
+					//坐标取像素中心
+					frag.fb_position.x = res[k][0].x + 0.5f;
+					frag.fb_position.y = res[k][0].y + 0.5f;
+					//深度z做插值
+					float alpha = res[k][2].x;
+					float beta = res[k][2].y;
+					float gamma = res[k][2].z;
+					frag.fb_position.z = alpha * va.fb_position.z + beta * vb.fb_position.z + gamma * vc.fb_position.z;
+					
+					//属性做插值
+					if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Smooth) {
+						// A1T5: screen-space smooth triangles
+						for (int h = 0; h < FA; h++) {
+							frag.attributes[h] = alpha * va.attributes[h] + beta * vb.attributes[h] + gamma * vc.attributes[h];
+						}
+					} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Correct) {
+						// A1T5: perspective correct triangles
+						for (int h = 0; h < FA; h++) {
+							frag.attributes[h] = (alpha * va.attributes[h] * va.inv_w + beta * vb.attributes[h] * vb.inv_w + gamma * vc.attributes[h] * vc.inv_w)
+								/ (alpha * va.inv_w + beta * vb.inv_w + gamma * vc.inv_w);
+						}
+					}
+
+					float sx = res[k][0].x;
+					float sy = res[k][0].y;
+					float delta = 0.001f;//
+					Vec3 difference;
+					//接下来处理导数，四个片元分开处理
+					for (int h = 0; h < FD; h++) {//遍历所有导数
+						
+						if (k == 0 || k == 2) {//x的forward差
+
+							if (res[k + 1].size()) {//右边的点在三角形内存在
+								difference = Vec3(res[k + 1][2].x - alpha, res[k + 1][2].y - beta, res[k + 1][2].z - gamma);//求重心坐标的改变量
+							}
+							else {//右边没有合法的点供我们算偏导，只能自己算，目标是求右边一点的重心坐标和属性值
+								Vec3 temp = CalculateBarycentric(vva, vvb, vvc, sy, sx + delta);
+								difference = Vec3(temp.x - alpha, temp.y - beta, temp.z - gamma);
+								difference /= delta;
+							}
+							frag.derivatives[h].x = va.attributes[h] * difference.x + vb.attributes[h] * difference.y + vc.attributes[h] * difference.z;
+
+						}
+						if (k == 1 || k == 3) {//x的backward差
+							if (res[k - 1].size()) {
+								difference = Vec3(res[k][2].x - res[k - 1][2].x, res[k][2].y - res[k - 1][2].y, res[k][2].z - res[k - 1][2].z);
+							}
+							else {
+								Vec3 temp = CalculateBarycentric(vva, vvb, vvc, sy, sx - delta);
+								difference = Vec3(temp.x - alpha, temp.y - beta, temp.z - gamma);
+								difference /= delta;
+							}
+							frag.derivatives[h].x = va.attributes[h] * difference.x + vb.attributes[h] * difference.y + vc.attributes[h] * difference.z;
+						}
+						if (k == 0 || k == 1) {//y的forward差
+							if (res[k + 2].size()) {
+								difference = Vec3(res[k + 2][2].x - res[k][2].x, res[k + 2][2].y - res[k][2].y, res[k + 2][2].z - res[k][2].z);
+							}
+							else {
+								Vec3 temp = CalculateBarycentric(vva, vvb, vvc, sy + delta, sx);
+								difference = Vec3(temp.x - alpha, temp.y - beta, temp.z - gamma);
+								difference /= delta;
+							}
+							frag.derivatives[h].y = va.attributes[h] * difference.x + vb.attributes[h] * difference.y + vc.attributes[h] * difference.z;
+						}
+						if (k == 2 || k == 3) {//y的backward差
+							if (res[k - 2].size()) {
+								difference = Vec3(res[k][2].x - res[k - 2][2].x, res[k][2].y - res[k - 2][2].y, res[k][2].z - res[k - 2][2].z);
+							}
+							else {
+								Vec3 temp = CalculateBarycentric(vva, vvb, vvc, sy - delta, sx);
+								difference = Vec3(temp.x - alpha, temp.y - beta, temp.z - gamma);
+								difference /= delta;
+							}
+							frag.derivatives[h].y = va.attributes[h] * difference.x + vb.attributes[h] * difference.y + vc.attributes[h] * difference.z;
+						}
+					}
+					emit_fragment(frag);
+				}
+			}
+		}	
 	}
+}
+inline Vec3 CalculateBarycentric(Vec2 const& va, Vec2 const& vb, Vec2 const& vc,
+		float i, float j) {
+	Vec2 P(j + 0.5f, i + 0.5f);
+	Vec2 A(va.x, va.y);
+	Vec2 B(vb.x, vb.y);
+	Vec2 C(vc.x, vc.y);
+	Vec2 AP = P - A;
+	Vec2 BP = P - B;
+	Vec2 CP = P - C;
+	Vec2 AB = B - A;
+	Vec2 BC = C - B;
+	Vec2 CA = A - C;
+	Vec2 AC = -CA;
+	// 求重心坐标, 得到z的插值
+	float Sabc = 0.5f * abs(AB.x * AC.y - AB.y * AC.x);
+	float Spab = 0.5f * abs(AP.x * AB.y - AP.y * AB.x);
+	float Spbc = 0.5f * abs(BP.x * BC.y - BP.y * BC.x);
+	float Spca = 0.5f * abs(CP.x * CA.y - CP.y * CA.x);
+	float alpha = Spbc / Sabc;
+	float beta = Spca / Sabc;
+	float gamma = Spab / Sabc;
+	return Vec3(alpha, beta, gamma);
+}
+//根据三角形三个顶点和P坐标 求出三个z值和重心坐标
+inline std::vector<Vec3> CalculateFragment(Vec2 const& va, Vec2 const& vb, Vec2 const& vc,
+		int i, int j) {
+	Vec2 P(j + 0.5f, i + 0.5f);
+	Vec2 A(va.x, va.y);
+	Vec2 B(vb.x, vb.y);
+	Vec2 C(vc.x, vc.y);
+	Vec2 AP = P - A;
+	Vec2 BP = P - B;
+	Vec2 CP = P - C;
+	Vec2 AB = B - A;
+	Vec2 BC = C - B;
+	Vec2 CA = A - C;
+	Vec2 AC = -CA;
+	//求叉乘结果
+	float z1 = AP.x * AB.y - AP.y * AB.x;
+	float z2 = BP.x * BC.y - BP.y * BC.x;
+	float z3 = CP.x * CA.y - CP.y * CA.x;
+	// 求重心坐标, 得到z的插值
+	float Sabc = 0.5f * abs(AB.x * AC.y - AB.y * AC.x);
+	float Spab = 0.5f * abs(AP.x * AB.y - AP.y * AB.x);
+	float Spbc = 0.5f * abs(BP.x * BC.y - BP.y * BC.x);
+	float Spca = 0.5f * abs(CP.x * CA.y - CP.y * CA.x);
+	float alpha = Spbc / Sabc;
+	float beta = Spca / Sabc;
+	float gamma = Spab / Sabc;
+
+	if (z1 > 0 && z2 > 0 && z3 > 0 || z1 < 0 && z2 < 0 && z3 < 0) {//点在三角形内才返回值
+		return {Vec3(j, i, 0), Vec3(z1, z2, z3), Vec3(alpha, beta, gamma)};
+	}
+	return {};
 }
 
 //-------------------------------------------------------------------------
